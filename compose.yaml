@@ -1,0 +1,241 @@
+#file: noinspection SpellCheckingInspection
+name: atena_2026
+
+volumes:
+
+  media:
+    driver: local
+    driver_opts:
+      o: "${HOST_MEDIA_VOL_TYPE:-bind}"
+      type: "${HOST_MEDIA_VOL_OPTIONS:-none}"
+      device: "${HOST_MEDIA_ROOT:-backend/media}"  # especificar no arquivo .env
+
+
+
+services:
+
+  postgres:
+    build: postgres
+    env_file: .env
+    expose:
+      - "${POSTGRES_PORT:-5432}"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER:-postgres}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5    
+    logging: { driver: json-file, options: { max-size: 20m, max-file: 7 } }
+    ports:
+      - "${POSTGRES_HOST_PORT:-5432}:${POSTGRES_PORT:-5432}"
+    restart: unless-stopped
+    shm_size: 2g
+    volumes:
+      - ./postgres/data:/var/lib/postgresql/data
+      - ./var:/var/host_var
+
+  valkey:
+    build: valkey
+    expose:
+      - "${VALKEY_PORT:-6379}"
+    logging: { driver: json-file, options: { max-size: 20m, max-file: 7 } }
+    ports:
+      - "${VALKEY_HOST_PORT:-6379}:${VALKEY_PORT:-6379}"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "valkey-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  firefox:
+    build: firefox
+    expose:
+      - "${FIREFOX_PORT:-4444}"
+      - "${VNCFIREFOX_PORT:-7900}"
+    ports:
+      - "${FIREFOX_HOST_PORT:-4444}:${FIREFOX_PORT:-4444}"
+      - "${VNCFIREFOX_HOST_PORT:-7900}:${VNCFIREFOX_PORT:-7900}"
+    restart: unless-stopped
+    shm_size: 2g
+    logging: { driver: json-file, options: { max-size: 20m, max-file: 7 } }
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:4444/status"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  gotenberg:
+    build: gotenberg
+    command: [ "gotenberg", "--api-timeout=60s", "--libreoffice-restart-after=100" ]
+    expose:
+      - "${GOTENBERG_PORT:-3000}"
+    ports:
+      - "${GOTENBERG_HOST_PORT:-3000}:${GOTENBERG_PORT:-3000}"
+    restart: unless-stopped
+    shm_size: 2g
+    logging: { driver: json-file, options: { max-size: 20m, max-file: 7 } }
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      interval: 20s
+      timeout: 10s
+      retries: 3
+
+  tika:
+    build: tika
+    expose:
+      - "${TIKA_PORT:-9998}"
+    ports:
+      - "${TIKA_HOST_PORT:-9998}:${TIKA_PORT:-9998}"
+    restart: unless-stopped
+    shm_size: 512m
+    deploy:
+      resources:
+        limits:
+          memory: "${TIKA_MEM_LIMIT:-5500m}"
+        reservations:
+          memory: 1024m
+    logging: { driver: json-file, options: { max-size: 20m, max-file: 7 } }
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9998/"]
+      interval: 20s
+      timeout: 15s
+      retries: 3
+
+  django_image:
+    build: 
+      context: .
+      args:
+        HOST_APP_UID: "${HOST_APP_UID:-1001}"
+        HOST_APP_GID: "${HOST_APP_GID:-1002}"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      valkey:
+        condition: service_healthy    
+    entrypoint: [ "./entrypoint.sh", "migrate" ]
+    env_file: .env
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    image: atena_stack/django-image
+    logging: { driver: json-file, options: { max-size: 20m, max-file: 7 } }
+    pull_policy: never
+    user: "${HOST_APP_UID:-1001}:${HOST_APP_GID:-1002}"
+    volumes:
+      - media:/opt/stack/backend/media
+      - ./backend/datastore:/opt/stack/backend/datastore
+
+  backend:
+    depends_on:
+      postgres:
+        condition: service_healthy
+      valkey:
+        condition: service_healthy
+      django_image:
+        condition: service_completed_successfully
+      firefox:
+        condition: service_healthy
+      gotenberg:
+        condition: service_healthy
+      tika:
+        condition: service_healthy    
+    deploy:
+      resources:
+        limits:
+          memory: "${BACKEND_MEM_LIMIT:-8G}"
+    entrypoint: [ "./entrypoint.sh", "gunicorn" ]
+    env_file: .env
+    environment:
+      - PYTHONUNBUFFERED=1
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    image: atena_stack/django-image
+    logging: { driver: json-file, options: { max-size: 20m, max-file: 7 } }
+    ports:
+      - "8000:8000"
+    pull_policy: never
+    restart: unless-stopped
+    shm_size: 512m
+    user: "${HOST_APP_UID:-1001}:${HOST_APP_GID:-1002}"
+    volumes:
+      - media:/opt/stack/backend/media
+      - ./backend/datastore:/opt/stack/backend/datastore
+
+  celery:
+    depends_on:
+      postgres:
+        condition: service_healthy
+      valkey:
+        condition: service_healthy
+      django_image:
+        condition: service_completed_successfully
+      firefox:
+        condition: service_healthy
+      gotenberg:
+        condition: service_healthy
+      tika:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: "${CELERY_MEM_LIMIT:-32G}"
+    entrypoint: [ "./entrypoint.sh", "celery" ]
+    env_file: .env
+    healthcheck:
+      test: ["CMD-SHELL", "celery -A atena inspect ping || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    image: atena_stack/django-image
+    logging: { driver: json-file, options: { max-size: 20m, max-file: 7 } }
+    pull_policy: never
+    restart: unless-stopped
+    shm_size: 2g
+    user: "${HOST_APP_UID:-1001}:${HOST_APP_GID:-1002}"
+    volumes:
+      - media:/opt/stack/backend/media
+      - ./backend/datastore:/opt/stack/backend/datastore
+
+  nginx:
+    build: nginx
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:80/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    logging: { driver: json-file, options: { max-size: 20m, max-file: 7 } }
+    ports:
+      - "80:80"
+      - "443:443"
+    restart: unless-stopped
+
+  # glitchtip:
+  #   image: glitchtip/glitchtip
+  #   depends_on:
+  #     - postgres
+  #     - valkey
+  #   environment:
+  #     - DATABASE_URL=postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:${POSTGRES_PORT:-5432}/${POSTGRES_DB}
+  #     - REDIS_URL=redis://valkey:${VALKEY_PORT:-6379}/2
+  #     - SECRET_KEY=glitchtip
+  #     - PORT=8080
+  #   ports:
+  #     - "8080:8080"
+  #   restart: unless-stopped
+
+  # glitchtip-worker:
+  #   image: glitchtip/glitchtip
+  #   command: ./bin/run-celery-worker.sh
+  #   depends_on:
+  #     - postgres
+  #     - valkey
+  #   environment:
+  #     - DATABASE_URL=postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:${POSTGRES_PORT:-5432}/${POSTGRES_DB}
+  #     - REDIS_URL=redis://valkey:${VALKEY_PORT:-6379}/2
+  #     - SECRET_KEY=glitchtip
+  #   restart: unless-stopped

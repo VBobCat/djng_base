@@ -1,0 +1,11 @@
+/.env
+/.venv
+/var
+*.tmp
+/**/not_in_sapiens.txt
+.idea
+__pycache__/
+*.py[cod]
+*$py.class
+nohup.out
+.vscode/tasks.json
