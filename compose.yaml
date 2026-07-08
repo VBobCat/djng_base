@@ -1,5 +1,5 @@
 #file: noinspection SpellCheckingInspection
-name: atena_2026
+name: djng_2026
 
 volumes:
 
@@ -116,7 +116,7 @@ services:
     env_file: .env
     extra_hosts:
       - "host.docker.internal:host-gateway"
-    image: atena_stack/django-image
+    image: djng_stack/django-image
     logging: { driver: json-file, options: { max-size: 20m, max-file: 7 } }
     pull_policy: never
     user: "${HOST_APP_UID:-1001}:${HOST_APP_GID:-1002}"
@@ -151,7 +151,7 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
-    image: atena_stack/django-image
+    image: djng_stack/django-image
     logging: { driver: json-file, options: { max-size: 20m, max-file: 7 } }
     ports:
       - "8000:8000"
@@ -184,11 +184,11 @@ services:
     entrypoint: [ "./entrypoint.sh", "celery" ]
     env_file: .env
     healthcheck:
-      test: ["CMD-SHELL", "celery -A atena inspect ping || exit 1"]
+      test: ["CMD-SHELL", "celery -A djng inspect ping || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 3
-    image: atena_stack/django-image
+    image: djng_stack/django-image
     logging: { driver: json-file, options: { max-size: 20m, max-file: 7 } }
     pull_policy: never
     restart: unless-stopped

@@ -46,7 +46,7 @@ MIDDLEWARE = [
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
 
-ROOT_URLCONF = 'base.urls'
+ROOT_URLCONF = 'djng.urls'
 
 TEMPLATES = [
     {
@@ -122,8 +122,8 @@ REST_FRAMEWORK = {
 # Simple JWT settings: https://django-rest-framework-simplejwt.readthedocs.io/en/latest/settings.html#settings
 SIMPLE_JWT = {
     'AUTH_TOKEN_CLASSES': ['rest_framework_simplejwt.tokens.SlidingToken'],
-    'ISSUER': 'Atena',
-    'AUDIENCE': 'Atena',
+    'ISSUER': 'DJNG',
+    'AUDIENCE': 'DJNG',
     'SLIDING_TOKEN_LIFETIME': timedelta(minutes=60),
     'SLIDING_TOKEN_REFRESH_LIFETIME': timedelta(minutes=60),
     'SLIDING_TOKEN_REFRESH_EXP_CLAIM': 'exp',

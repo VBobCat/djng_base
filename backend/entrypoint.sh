@@ -30,7 +30,7 @@ case "$MODE" in
   gunicorn)
     echo "Starting Gunicorn server..."
     # O exec substitui o shell pelo processo do gunicorn (melhor para Docker)
-    exec gunicorn atena.wsgi:application \
+    exec gunicorn djng.wsgi:application \
       --bind 0.0.0.0:"${DJANGO_BACKEND_PORT:-8000}" \
       --workers 10 \
       --max-requests 1000 \
@@ -47,16 +47,16 @@ case "$MODE" in
     
     # 1. Worker para a fila padrão (muda para o pool padrão se quiser, ou mantém isolado)
     # Exclui a fila 'etl' usando '-X etl'
-    python -m celery -A atena worker -E -l "${DJANGO_LOG_LEVEL:-WARNING}" -X etl &
+    python -m celery -A djng worker -E -l "${DJANGO_LOG_LEVEL:-WARNING}" -X etl &
     DEFAULT_WORKER_PID=$!
 
     # 2. Worker EXCLUSIVO para a fila 'etl' usando POOL=THREADS
     # Escuta apenas a fila 'etl' usando '-Q etl'
-    python -m celery -A atena worker -E -l "${DJANGO_LOG_LEVEL:-WARNING}" -Q etl --pool=threads --concurrency=2 &
+    python -m celery -A djng worker -E -l "${DJANGO_LOG_LEVEL:-WARNING}" -Q etl --pool=threads --concurrency=2 &
     ETL_WORKER_PID=$!
 
     # 3. Celery Beat
-    python -m celery -A atena beat --loglevel "${DJANGO_LOG_LEVEL:-WARNING}" &
+    python -m celery -A djng beat --loglevel "${DJANGO_LOG_LEVEL:-WARNING}" &
     BEAT_PID=$!
 
     # Aguarda todos os processos

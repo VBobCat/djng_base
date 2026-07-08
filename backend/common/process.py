@@ -22,7 +22,7 @@ def low_priority_process_initializer():
     except Exception:
         pass
     if not os.environ.get("DJANGO_SETTINGS_MODULE"):
-        os.environ.setdefault("DJANGO_SETTINGS_MODULE", "atena.settings")
+        os.environ.setdefault("DJANGO_SETTINGS_MODULE", "djng.settings")
     try:
         django.setup()
     except Exception:
